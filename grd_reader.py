@@ -12,12 +12,14 @@ import chroma
 
 shift_buf = "                                    "
 
+COLOR_TERMS = {"Cyn", "Mgnt", "Ylw", "Blck",
+               "Rd", "Grn", "Bl",
+               "H", "Strt", "Brgh"}
 
 class GrdReader(object):
     """Read an Adobe .grd format file"""
     def __init__(self, filename):
         self.filename = filename
-        self.gradients = []  # File can contain multiple gradient entries
         with open(filename, 'r') as f:
             self.buffer = f.read()
 
@@ -29,6 +31,14 @@ class GrdReader(object):
                       "doub": self._p_doub, "enum": self._p_enum,
                       "tdta": self._p_tdta}
 
+        # Store data about gradients
+        self.gradients = []  # File can contain multiple gradient entries
+        self.gradient_names = []
+
+        self._cur_obj_name = ""
+        self._cur_gradient = []  # Single gradient is a list of color entries
+        self._cur_clr = {}  # Each color is dict with colors + location + type
+
     def parse(self):
         """Parse file and load into a list of gradients"""
         offset = 28
@@ -36,11 +46,27 @@ class GrdReader(object):
         while offset < len(self.buffer):
             offset = self._parse_entry(self.buffer, offset, shift)
 
+        self._flush_gradient()
+
+    def _flush_gradient(self):
+        """Clear previous gradients"""
+        self._flush_color()
+
+        if self._cur_gradient:
+            self.gradients.append(self._cur_gradient)
+            self._cur_gradient = []
+
+    def _flush_color(self):
+        if self._cur_clr:
+            self._cur_gradient.append(self._cur_clr)  # New color stop; store previous one
+            self._cur_clr = {}
+
     def _parse_color(self, clr_type):
         """Parse color object (when field name = Clr). Return RGB triplet"""
         # TODO: Get color data.
         # TODO: Convert color data from specified format (PS) to tuple bounds used in py library
 
+        clr_type = clr_type.strip()
         if clr_type == "CMYC":
             fmt = "CMYK"
             # PS represents CMYK as a percent; chroma expects range 0..1
@@ -97,6 +123,10 @@ class GrdReader(object):
     def _p_long(self, buf, offset, name, shift):
         [size] = struct.unpack('>L', buf[offset:offset + 4])
         print shift * " ", name, "(long)", size
+
+        if self._cur_obj_name == "Clr" and name == "Lctn":
+            # Represents color info in gradient
+            self._cur_clr[name] = size
         return offset + 4
 
     def _p_vlls(self, buf, offset, name, shift):
@@ -116,7 +146,7 @@ class GrdReader(object):
         return offset
 
     def _p_objc(self, buf, offset, name, shift):
-        """Unpack the data from an object that contains multiple fields/values"""
+        """Unpack data from an object that contains multiple fields/values"""
         [objnamelen] = struct.unpack('>L', buf[offset:offset + 4])
         offset += 4
         objname = buf[offset:offset + objnamelen * 2]
@@ -130,6 +160,13 @@ class GrdReader(object):
         [value] = struct.unpack('>L', buf[offset:offset + 4])
         offset += 4
         print shift * " ", name, "(Objc)", objname, typename, value
+
+        self._cur_obj_name = name.strip()
+        if self._cur_obj_name == "Grad":
+            self._flush_gradient()
+        elif self._cur_obj_name == "Clr":
+            self._flush_color()
+
         shift += 2
         for i in range(value):
             offset = self._parse_entry(buf, offset, shift)
@@ -143,12 +180,21 @@ class GrdReader(object):
             string += str(
                 buf[offset + 4 + i * 2 + 1:offset + 4 + i * 2 + 2])
         print shift * " ", name, "(TEXT", size, ")", string
+
+        if self._cur_obj_name == "Grad" and name.strip() == "Nm":
+            self.gradient_names.append(string.strip())
+
         return offset + 4 + size * 2
 
     def _p_untf(self, buf, offset, name, shift):
         field_type = buf[offset:offset + 4]
         [value] = struct.unpack('>d', buf[offset + 4:offset + 4 + 8])
         print shift * " ", name, "(UntF)", field_type, value
+
+        name = name.strip()
+        if self._cur_obj_name == "Clr" and name in COLOR_TERMS:
+            # Store color information is this is a recognized palette
+            self._cur_clr[name] = value
         return offset + 12
 
     def _p_bool(self, buf, offset, name, shift):
@@ -160,6 +206,10 @@ class GrdReader(object):
         # unpack 8 bytes ieee 754 value to floating point number
         [value] = struct.unpack('>d', buf[offset:offset + 8])
         print shift * " ", name, "(doub)", value
+        name = name.strip()
+        if self._cur_obj_name == "Clr" and name in COLOR_TERMS:
+            # Store color information is this is a recognized palette
+            self._cur_clr[name] = value
         return offset + 8
 
     def _p_enum(self, buf, offset, name, shift):
@@ -216,6 +266,10 @@ def main():
             sys.exit(1)
 
         data.parse()
+
+        print "JSON BELOW"
+        from pprint import pprint as pp
+        pp(zip(data.gradient_names, data.gradients))
 
 if __name__ == '__main__':
     main()
