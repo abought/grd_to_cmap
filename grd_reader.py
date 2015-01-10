@@ -1,6 +1,7 @@
 # !/usr/bin/env python
 """
-Parse Adobe .grd files
+Parse Adobe .grd files, and optionally convert the colormaps within
+to a matplotlib colormap format.
 
 Adapted from work by Valek Filippov (c) 2010:
  https://gitorious.org/re-lab/graphics/source/781a65604d405f29c2da487820f64de8ddb0724d:photoshop/grd

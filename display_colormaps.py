@@ -54,7 +54,7 @@ cmaps = [('Sequential',     ['Blues', 'BuGn', 'BuPu',
          ('Miscellaneous',  ['gist_earth', 'terrain', 'ocean', 'gist_stern',
                              'brg', 'CMRmap', 'cubehelix',
                              'gnuplot', 'gnuplot2', 'gist_ncar',
-                             'nipy_spectral', 'jet', 'rainbow',
+                             'jet', 'rainbow',
                              'gist_rainbow', 'hsv', 'flag', 'prism'])]
 
 
