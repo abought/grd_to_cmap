@@ -33,6 +33,8 @@ class GrdReader(object):
                       "tdta": self._p_tdta}
 
         # Store data about gradients
+        # Because gradient names do not have to be unique, store names and gradients separately
+        # TODO: API is a bit clumsy
         self.gradients = []  # File can contain multiple gradient entries
         self.gradient_names = []
 
@@ -87,12 +89,39 @@ class GrdReader(object):
             color_tuple = (clr_data["H"],
                            clr_data["Strt"] / 100.,
                            clr_data["Brgh"] / 100.)
-
         else:
             raise NotImplementedError("Unknown color type: " + palette)
 
         color = chroma.Color(color_tuple, format=fmt)
         return color.rgb
+
+    def grd_to_cmap(self, gradient_spec):
+        """
+        Convert Adobe PS gradient information to a matplotlib cmap spec
+        gradient_spec: A list of color stops for one single gradient
+        """
+        # First, adjust the color stop positions to cover the full range 0..1:
+        #  .grd files can sometimes omit these endpoints. So stretch range
+        gradient_locations = [c["Lctn"] for c in gradient_spec]
+        min_loc = min(gradient_locations)
+        max_loc = max(gradient_locations)
+
+        gradient_locations = [(loc-min_loc)*(1./(max_loc-min_loc))
+                              for loc in gradient_locations]
+
+        gradient_rgb = [self._convert_color(c)
+                        for c in gradient_spec]
+
+        cmap_dict = {'red': [],
+                     'green': [],
+                     'blue': []}
+
+        for loc, rgb in zip(gradient_locations, gradient_rgb):
+            cmap_dict["red"].append((loc, rgb[0], rgb[0]))
+            cmap_dict["green"].append((loc, rgb[1], rgb[1]))
+            cmap_dict["blue"].append((loc, rgb[2], rgb[2]))
+
+        return cmap_dict
 
     def _parse_entry(self, buf, offset, shift):
         [nlen] = struct.unpack('>L', buf[offset:offset + 4])
@@ -288,6 +317,9 @@ def main():
                          for gradient in data.gradients]
         pp(zip(data.gradient_names, mod_gradients))
 
+        print "Matplotlib gradient specs"
+        for g in data.gradients:
+            pp(data.grd_to_cmap(g))
 
 if __name__ == '__main__':
     main()
