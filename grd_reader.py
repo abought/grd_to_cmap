@@ -16,6 +16,7 @@ COLOR_TERMS = {"Cyn", "Mgnt", "Ylw", "Blck",
                "Rd", "Grn", "Bl",
                "H", "Strt", "Brgh"}
 
+
 class GrdReader(object):
     """Read an Adobe .grd format file"""
     def __init__(self, filename):
@@ -61,29 +62,36 @@ class GrdReader(object):
             self._cur_gradient.append(self._cur_clr)  # New color stop; store previous one
             self._cur_clr = {}
 
-    def _parse_color(self, clr_type):
+    def _convert_color(self, clr_data):
         """Parse color object (when field name = Clr). Return RGB triplet"""
         # TODO: Get color data.
         # TODO: Convert color data from specified format (PS) to tuple bounds used in py library
 
-        clr_type = clr_type.strip()
-        if clr_type == "CMYC":
+        palette = clr_data["palette"]
+        if palette == "CMYC":
             fmt = "CMYK"
             # PS represents CMYK as a percent; chroma expects range 0..1
-            color_data = [x / 100. for x in color_data]
-        elif clr_type == "RGBC":
+            color_tuple = (clr_data["Cyn"] / 100.,
+                           clr_data["Mgnt"] / 100.,
+                           clr_data["Ylw"] / 100.,
+                           clr_data["Blck"] / 100.)
+        elif palette == "RGBC":
             fmt = "RGB"
             # PS represents RGB values as 0-255; chroma expects range 0..1
-            color_data = [x / 255. for x in color_data]
-        elif clr_type == "HSBC":
+            color_tuple = (clr_data["Rd"] / 255.,
+                           clr_data["Grn"] / 255.,
+                           clr_data["Bl"] / 255.)
+        elif palette == "HSBC":
             fmt = "HSV"
             # PS represents Hue as an angle (0-360), and Sat/Bright as %
-            color_data[1] /= 100.
-            color_data[2] /= 100.
-        else:
-            raise NotImplementedError("Unknown color type: " + clr_type)
+            color_tuple = (clr_data["H"],
+                           clr_data["Strt"] / 100.,
+                           clr_data["Brgh"] / 100.)
 
-        color = chroma.Color(color_data, format=fmt)
+        else:
+            raise NotImplementedError("Unknown color type: " + palette)
+
+        color = chroma.Color(color_tuple, format=fmt)
         return color.rgb
 
     def _parse_entry(self, buf, offset, shift):
@@ -166,6 +174,7 @@ class GrdReader(object):
             self._flush_gradient()
         elif self._cur_obj_name == "Clr":
             self._flush_color()
+            self._cur_clr = {"palette": typename.strip()}
 
         shift += 2
         for i in range(value):
@@ -269,7 +278,16 @@ def main():
 
         print "JSON BELOW"
         from pprint import pprint as pp
+        # Sample display of data in internal structure
+
+        print "Gradient information"
         pp(zip(data.gradient_names, data.gradients))
+
+        print "Modified gradients (consistent RGB)"
+        mod_gradients = [[data._convert_color(c) for c in gradient]
+                         for gradient in data.gradients]
+        pp(zip(data.gradient_names, mod_gradients))
+
 
 if __name__ == '__main__':
     main()
