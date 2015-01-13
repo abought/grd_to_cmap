@@ -7,7 +7,7 @@ Adapted from work by Valek Filippov (c) 2010:
  https://gitorious.org/re-lab/graphics/source/781a65604d405f29c2da487820f64de8ddb0724d:photoshop/grd
 """
 
-import sys, struct
+import functools, sys, struct
 
 import chroma
 
@@ -101,13 +101,15 @@ class GrdReader(object):
         Convert Adobe PS gradient information to a matplotlib cmap spec
         gradient_spec: A list of color stops for one single gradient
         """
+        roundoff = functools.partial(round, ndigits=3)
+
         # First, adjust the color stop positions to cover the full range 0..1:
         #  .grd files can sometimes omit these endpoints. So stretch range
         gradient_locations = [c["Lctn"] for c in gradient_spec]
         min_loc = min(gradient_locations)
         max_loc = max(gradient_locations)
 
-        gradient_locations = [(loc-min_loc)*(1./(max_loc-min_loc))
+        gradient_locations = [roundoff((loc-min_loc)*(1./(max_loc-min_loc)))
                               for loc in gradient_locations]
 
         gradient_rgb = [self._convert_color(c)
@@ -118,9 +120,12 @@ class GrdReader(object):
                      'blue': []}
 
         for loc, rgb in zip(gradient_locations, gradient_rgb):
-            cmap_dict["red"].append((loc, rgb[0], rgb[0]))
-            cmap_dict["green"].append((loc, rgb[1], rgb[1]))
-            cmap_dict["blue"].append((loc, rgb[2], rgb[2]))
+            cmap_dict["red"].append((
+                loc, roundoff(rgb[0]), roundoff(rgb[0])))
+            cmap_dict["green"].append(
+                (loc, roundoff(rgb[1]), roundoff(rgb[1])))
+            cmap_dict["blue"].append(
+                (loc, roundoff(rgb[2]), roundoff(rgb[2])))
 
         return cmap_dict
 
