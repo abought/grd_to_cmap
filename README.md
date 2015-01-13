@@ -25,7 +25,7 @@ this may be refined in future versions.
 This tool was originally designed for a specific purpose (extraction of the 
 [ORI "Advanced forensic actions" lookup tables](http://ori.hhs.gov/advanced-forensic-actions) for use with matplotlib).
 
-As such, it is heavily optimized for the creation of Linear Segmented Color 
+As such, it is heavily tailored towards the creation of Linear Segmented Color 
 Maps with evenly spaced colors. Discontinuous gradients, opacity, and the 
 LAB color scheme are among the features not presently supported. 
 Issue reports and pull requests are welcome.
