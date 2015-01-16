@@ -96,11 +96,8 @@ class GrdReader(object):
         color = chroma.Color(color_tuple, format=fmt)
         return color.rgb
 
-    def grd_to_cmap(self, gradient_spec):
-        """
-        Convert Adobe PS gradient information to a matplotlib cmap spec
-        gradient_spec: A list of color stops for one single gradient
-        """
+    def _cleanup_gradient(self, gradient_spec):
+        """Ensure that locations are 0..1, and convert colors to rgb"""
         roundoff = functools.partial(round, ndigits=3)
 
         # First, adjust the color stop positions to cover the full range 0..1:
@@ -112,8 +109,17 @@ class GrdReader(object):
         gradient_locations = [roundoff((loc-min_loc)*(1./(max_loc-min_loc)))
                               for loc in gradient_locations]
 
-        gradient_rgb = [self._convert_color(c)
+        gradient_rgb = [map(roundoff, self._convert_color(c))
                         for c in gradient_spec]
+
+        return gradient_locations, gradient_rgb
+
+    def grd_to_cmap(self, gradient_spec):
+        """
+        Convert Adobe PS gradient information to a matplotlib cmap spec
+        gradient_spec: A list of color stops for one single gradient
+        """
+        gradient_locations, gradient_rgb = self._cleanup_gradient(gradient_spec)
 
         cmap_dict = {'red': [],
                      'green': [],
@@ -121,13 +127,25 @@ class GrdReader(object):
 
         for loc, rgb in zip(gradient_locations, gradient_rgb):
             cmap_dict["red"].append((
-                loc, roundoff(rgb[0]), roundoff(rgb[0])))
+                loc, rgb[0], rgb[0]))
             cmap_dict["green"].append(
-                (loc, roundoff(rgb[1]), roundoff(rgb[1])))
+                (loc, rgb[1], rgb[1]))
             cmap_dict["blue"].append(
-                (loc, roundoff(rgb[2]), roundoff(rgb[2])))
+                (loc, rgb[2], rgb[2]))
 
         return cmap_dict
+
+    def grd_to_js(self, gradient_spec):
+        """Convert Adobe PS information data to a JS-format list of colorstops, suitable for use with an HTML5 gradient"""
+        gradient_locations, gradient_rgb = self._cleanup_gradient(gradient_spec)
+
+        colorstops = []
+        for loc, rgb in zip(gradient_locations, gradient_rgb):
+            scaled_rgb = [int(c * 255) for c in rgb]
+            color_str = "rgb({0}, {1}, {2})".format(*scaled_rgb)
+            colorstops.append([loc, color_str])
+
+        return colorstops
 
     def _parse_entry(self, buf, offset, shift):
         [nlen] = struct.unpack('>L', buf[offset:offset + 4])
