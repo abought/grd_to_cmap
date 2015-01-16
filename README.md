@@ -14,12 +14,23 @@ Required dependencies can be installed via the following command:
 
 `pip install -r requirements.txt`
 
-And the tool can be run as follows:
+The basic reader can be called from other programs, or run directly to output 
+a textual representation of data in the gradient file:
 
 `python grd_reader.py input_filename.grd`
 
-At present raw data is dumped to the console and some reformatting is required;
-this may be refined in future versions.
+To parse the file and generate a python-importable matplotlib-format 
+color map (with extension .py):
+
+`python matplotlib_converter.py input_filename.grd` 
+
+And to parse the file and generate a list of colorstops 
+(suitable for use with HTML5 canvas gradients) to a new file 
+(with extension .js):
+
+`python jsgradient_converter.py`
+
+In the future these scripts will be consolidated to a single tool.
 
 ### Known limitations
 This tool was originally designed for a specific purpose (extraction of the 
