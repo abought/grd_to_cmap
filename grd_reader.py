@@ -1,4 +1,4 @@
-# !/usr/bin/env python
+# !/usr/bin/env python3
 """
 Parse Adobe .grd files, and optionally convert the colormaps within
 to a matplotlib colormap format.
@@ -7,9 +7,9 @@ Adapted from work by Valek Filippov (c) 2010:
  https://gitorious.org/re-lab/graphics/source/781a65604d405f29c2da487820f64de8ddb0724d:photoshop/grd
 """
 
-import functools, sys, struct
-
-import chroma
+import functools
+import sys
+import struct
 
 shift_buf = "                                    "
 
@@ -17,12 +17,11 @@ COLOR_TERMS = {"Cyn", "Mgnt", "Ylw", "Blck",
                "Rd", "Grn", "Bl",
                "H", "Strt", "Brgh"}
 
-
 class GrdReader(object):
     """Read an Adobe .grd format file"""
     def __init__(self, filename):
         self.filename = filename
-        with open(filename, 'r') as f:
+        with open(filename, 'rb') as f:
             self.buffer = f.read()
 
         # Define functions used to handle particular types of data
@@ -67,34 +66,34 @@ class GrdReader(object):
 
     def _convert_color(self, clr_data):
         """Parse color object (when field name = Clr). Return RGB triplet"""
-        # TODO: Get color data.
-        # TODO: Convert color data from specified format (PS) to tuple bounds used in py library
-
         palette = clr_data["palette"]
         if palette == "CMYC":
-            fmt = "CMYK"
-            # PS represents CMYK as a percent; chroma expects range 0..1
-            color_tuple = (clr_data["Cyn"] / 100.,
-                           clr_data["Mgnt"] / 100.,
-                           clr_data["Ylw"] / 100.,
-                           clr_data["Blck"] / 100.)
+            # Convert CMYK to RGB
+            c, m, y, k = [clr_data[key] / 100.0 for key in ["Cyn", "Mgnt", "Ylw", "Blck"]]
+            r = (1.0 - c) * (1.0 - k)
+            g = (1.0 - m) * (1.0 - k)
+            b = (1.0 - y) * (1.0 - k)
+            return (r, g, b)
         elif palette == "RGBC":
-            fmt = "RGB"
-            # PS represents RGB values as 0-255; chroma expects range 0..1
-            color_tuple = (clr_data["Rd"] / 255.,
-                           clr_data["Grn"] / 255.,
-                           clr_data["Bl"] / 255.)
+            # PS represents RGB values as 0-255; we need range 0..1
+            return tuple(clr_data[key] / 255.0 for key in ["Rd", "Grn", "Bl"])
         elif palette == "HSBC":
-            fmt = "HSV"
-            # PS represents Hue as an angle (0-360), and Sat/Bright as %
-            color_tuple = (clr_data["H"],
-                           clr_data["Strt"] / 100.,
-                           clr_data["Brgh"] / 100.)
+            # Convert HSV to RGB
+            h, s, v = clr_data["H"] / 360.0, clr_data["Strt"] / 100.0, clr_data["Brgh"] / 100.0
+            if s == 0.0:
+                return (v, v, v)
+            i = int(h * 6.)
+            f = (h * 6.) - i
+            p, q, t = v * (1. - s), v * (1. - s * f), v * (1. - s * (1. - f))
+            i %= 6
+            if i == 0: return (v, t, p)
+            if i == 1: return (q, v, p)
+            if i == 2: return (p, v, t)
+            if i == 3: return (p, q, v)
+            if i == 4: return (t, p, v)
+            if i == 5: return (v, p, q)
         else:
             raise NotImplementedError("Unknown color type: " + palette)
-
-        color = chroma.Color(color_tuple, format=fmt)
-        return color.rgb
 
     def _cleanup_gradient(self, gradient_spec):
         """Ensure that locations are 0..1, and convert colors to rgb"""
@@ -109,7 +108,7 @@ class GrdReader(object):
         gradient_locations = [roundoff((loc-min_loc)*(1./(max_loc-min_loc)))
                               for loc in gradient_locations]
 
-        gradient_rgb = [map(roundoff, self._convert_color(c))
+        gradient_rgb = [list(map(roundoff, self._convert_color(c)))
                         for c in gradient_spec]
 
         return gradient_locations, gradient_rgb
@@ -153,14 +152,14 @@ class GrdReader(object):
             nlen = 4
         offset += 4
 
-        name = buf[offset:offset + nlen]
+        name = buf[offset:offset + nlen].decode('utf-8')
         offset = offset + nlen
-        field_type = buf[offset:offset + 4]
+        field_type = buf[offset:offset + 4].decode('utf-8')
         offset += 4
         if field_type in self.types:  # Call appropriate func for field type
             offset = self.types[field_type](buf, offset, name, shift)
         else:
-            print "Unknown key:\t", name, field_type
+            print("Unknown key:\t", name, field_type)
             self.p_unkn(buf, offset, name, shift)
         return offset
 
@@ -171,9 +170,9 @@ class GrdReader(object):
     def _p_tdta(self, buf, offset, name, shift):
         [size] = struct.unpack('>L', buf[offset:offset + 4])
         offset += 4
-        string = buf[offset:offset + size]
+        string = buf[offset:offset + size].decode('utf-8')
         offset += size
-        print shift * " ", name, "(tdta", size, ")", string
+        print(shift * " ", name, "(tdta", size, ")", string)
         return offset
 
     def _p_desc(self, buf, offset, name, shift):
@@ -183,7 +182,7 @@ class GrdReader(object):
 
     def _p_long(self, buf, offset, name, shift):
         [size] = struct.unpack('>L', buf[offset:offset + 4])
-        print shift * " ", name, "(long)", size
+        print(shift * " ", name, "(long)", size)
 
         if self._cur_obj_name == "Clr" and name == "Lctn":
             # Represents color info in gradient
@@ -193,15 +192,15 @@ class GrdReader(object):
     def _p_vlls(self, buf, offset, name, shift):
         [size] = struct.unpack('>L', buf[offset:offset + 4])
         offset += 4
-        print shift * " ", name, "(VlLs)", size
+        print(shift * " ", name, "(VlLs)", size)
         shift += 2
         for i in range(size):
-            field_type = buf[offset:offset + 4]
+            field_type = buf[offset:offset + 4].decode('utf-8')
             offset += 4
             if field_type in self.types:
                 offset = self.types[field_type](buf, offset, "----", shift)
             else:
-                print "Unknown key:\t", name, field_type
+                print("Unknown key:\t", name, field_type)
                 self.p_unkn(buf, offset, "", shift)
         shift -= 2
         return offset
@@ -210,17 +209,17 @@ class GrdReader(object):
         """Unpack data from an object that contains multiple fields/values"""
         [objnamelen] = struct.unpack('>L', buf[offset:offset + 4])
         offset += 4
-        objname = buf[offset:offset + objnamelen * 2]
+        objname = buf[offset:offset + objnamelen * 2].decode('utf-8')
         offset += objnamelen * 2
         [objtypelen] = struct.unpack('>L', buf[offset:offset + 4])
         if objtypelen == 0:
             objtypelen = 4
         offset += 4
-        typename = buf[offset:offset + objtypelen]
+        typename = buf[offset:offset + objtypelen].decode('utf-8')
         offset += objtypelen
         [value] = struct.unpack('>L', buf[offset:offset + 4])
         offset += 4
-        print shift * " ", name, "(Objc)", objname, typename, value
+        print(shift * " ", name, "(Objc)", objname, typename, value)
 
         self._cur_obj_name = name.strip()
         if self._cur_obj_name == "Grad":
@@ -239,9 +238,8 @@ class GrdReader(object):
         [size] = struct.unpack('>L', buf[offset:offset + 4])
         string = ""
         for i in range(size - 1):
-            string += str(
-                buf[offset + 4 + i * 2 + 1:offset + 4 + i * 2 + 2])
-        print shift * " ", name, "(TEXT", size, ")", string
+            string += buf[offset + 4 + i * 2 + 1:offset + 4 + i * 2 + 2].decode('utf-8')
+        print(shift * " ", name, "(TEXT", size, ")", string)
 
         if self._cur_obj_name == "Grad" and name.strip() == "Nm":
             self.gradient_names.append(string.strip())
@@ -249,9 +247,9 @@ class GrdReader(object):
         return offset + 4 + size * 2
 
     def _p_untf(self, buf, offset, name, shift):
-        field_type = buf[offset:offset + 4]
+        field_type = buf[offset:offset + 4].decode('utf-8')
         [value] = struct.unpack('>d', buf[offset + 4:offset + 4 + 8])
-        print shift * " ", name, "(UntF)", field_type, value
+        print(shift * " ", name, "(UntF)", field_type, value)
 
         name = name.strip()
         if self._cur_obj_name == "Clr" and name in COLOR_TERMS:
@@ -260,14 +258,13 @@ class GrdReader(object):
         return offset + 12
 
     def _p_bool(self, buf, offset, name, shift):
-        # ord converts 1 byte number
-        print shift * " ", name, "(bool)", ord(buf[offset:offset + 1])
+        print(shift * " ", name, "(bool)", buf[offset:offset + 1][0])
         return offset + 1
 
     def _p_doub(self, buf, offset, name, shift):
         # unpack 8 bytes ieee 754 value to floating point number
         [value] = struct.unpack('>d', buf[offset:offset + 8])
-        print shift * " ", name, "(doub)", value
+        print(shift * " ", name, "(doub)", value)
         name = name.strip()
         if self._cur_obj_name == "Clr" and name in COLOR_TERMS:
             # Store color information is this is a recognized palette
@@ -279,15 +276,15 @@ class GrdReader(object):
         offset += 4
         if size1 == 0:
             size1 = 4
-        name1 = buf[offset:offset + size1]
+        name1 = buf[offset:offset + size1].decode('utf-8')
         offset += size1
         [size2] = struct.unpack('>L', buf[offset:offset + 4])
         if size2 == 0:
             size2 = 4
         offset += 4
-        name2 = buf[offset:offset + size2]
+        name2 = buf[offset:offset + size2].decode('utf-8')
         offset += size2
-        print shift * " ", name, "(enum)", name1, name2
+        print(shift * " ", name, "(enum)", name1, name2)
         return offset
 
     def p_unkn(self, buf, offset, name, shift):
@@ -295,28 +292,27 @@ class GrdReader(object):
         # in such case offset+4:offset+8 is next length
         # and offset+8:offset+12 is next enum
         # check for it
-        name = buf[offset + 8:offset + 12]
+        name = buf[offset + 8:offset + 12].decode('utf-8')
         if name in self.types:
             # everything is fine
             [size] = struct.unpack('>L', buf[offset:offset + 4])
             return size, offset + 4
         else:
-            print "Failed with simple case\n"
+            print("Failed with simple case\n")
             str_hex = ""
             str_asc = ""
             ml = 15
             for i in range(ml):
                 try:
-                    str_hex += "%02x " % ord(buf[offset + i])
-                    if ord(buf[offset + i]) < 32 or 126 < ord(buf[offset + i]):
+                    str_hex += "%02x " % buf[offset + i]
+                    if buf[offset + i] < 32 or 126 < buf[offset + i]:
                         str_asc += '.'
                     else:
-                        str_asc += buf[offset + i]
-                    print str_hex, str_asc
+                        str_asc += chr(buf[offset + i])
+                    print(str_hex, str_asc)
                 except:
-                    print "Something failed"
+                    print("Something failed")
             return str_hex + " " + str_asc, len(buf) + 1
-
 
 def main():
     if len(sys.argv) >= 2:
@@ -324,24 +320,24 @@ def main():
         try:
             data = GrdReader(filename)
         except IOError:
-            print "No file"
+            print("No file")
             sys.exit(1)
 
         data.parse()
 
-        print "JSON BELOW"
+        print("JSON BELOW")
         from pprint import pprint as pp
         # Sample display of data in internal structure
 
-        print "Gradient information"
-        pp(zip(data.gradient_names, data.gradients))
+        print("Gradient information")
+        pp(list(zip(data.gradient_names, data.gradients)))
 
-        print "Modified gradients (consistent RGB)"
+        print("Modified gradients (consistent RGB)")
         mod_gradients = [[data._convert_color(c) for c in gradient]
                          for gradient in data.gradients]
-        pp(zip(data.gradient_names, mod_gradients))
+        pp(list(zip(data.gradient_names, mod_gradients)))
 
-        print "Matplotlib gradient specs"
+        print("Matplotlib gradient specs")
         for g in data.gradients:
             pp(data.grd_to_cmap(g))
 
