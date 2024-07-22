@@ -4,23 +4,22 @@ set of matplotlib colormaps
 """
 __author__ = 'abought'
 
-import argparse, collections, keyword, os, pprint, re, sys
-
-try:
-    from cStringIO import StringIO
-except ImportError:
-    from StringIO import StringIO
+import argparse
+import collections
+import keyword
+import os
+import pprint
+import re
+import sys
+from io import StringIO
 
 import grd_reader
-
 
 def command_line():
     parser = argparse.ArgumentParser()
     parser.add_argument("filename",
                         help="Path to an Adobe .grd file")
-
     return parser.parse_args()
-
 
 #### Functions to process the input file
 def parse_file(filename):
@@ -32,7 +31,7 @@ def parse_file(filename):
     try:
         grd = grd_reader.GrdReader(filename)
     except IOError:
-        print "File not found"
+        print("File not found")
         sys.exit(1)
 
     try:
@@ -43,10 +42,8 @@ def parse_file(filename):
 
     return grd
 
-
 def unique_grd_names(grd_names_list):
     """Adobe GRD format allows gradient names to be non-unique.
-
      Modify gradient names so that each can be referenced uniquely"""
 
     # First, the gradient names must be valid python variables and len > 0
@@ -62,7 +59,6 @@ def unique_grd_names(grd_names_list):
 
     return new_grd_names
 
-
 ### Functions to write the output file
 def write_headers(out_str):
     """
@@ -71,8 +67,7 @@ def write_headers(out_str):
     out_str.write("import matplotlib.pyplot as plt\n"
                   "from matplotlib.colors import LinearSegmentedColormap\n\n")
 
-    return out_str   # TODOL refactor to oop
-
+    return out_str   # TODO: refactor to oop
 
 def write_gradient(gradient_name, gradient_data, out_str):
     """Write data about one gradient"""
@@ -86,13 +81,11 @@ def write_gradient(gradient_name, gradient_data, out_str):
     out_str.write("plt.register_cmap(cmap={0})\n\n".format(gradient_name))
     return out_str
 
-
 def write_gradients_list(gradient_names, out_str):
     """Write a list of all gradients in file for convenient external access"""
     grad_str = pprint.pformat(gradient_names)
     out_str.write("ALL_GRADIENTS = {}\n\n".format(grad_str))
     return out_str
-
 
 def generate_outfile(grd, out_fn):
     """Generate a python file containing colormap data"""
